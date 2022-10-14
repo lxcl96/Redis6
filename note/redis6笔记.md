@@ -968,23 +968,76 @@ bitop and(or/not/or) destkey key1 key2 ...
 
 ### 6.2.1、简介
 
+在工作当中，我们经常会遇到与统计相关的功能需求，比如统计网站PV（PageView页面访问量）,可以使用Redis的incr、incrby轻松实现。
 
+但像UV（UniqueVisitor，独立访客）、独立IP数、搜索记录数等需要去重和计数的问题如何解决？这种求集合中不重复元素个数的问题称为基数问题。
+
+解决基数问题有很多种方案：
+
+（1）数据存储在MySQL表中，使用distinct count计算不重复个数
+
+（2）使用Redis提供的hash、set、bitmaps等数据结构来处理
+
+以上的方案结果精确，但随着数据不断增加，导致占用空间越来越大，对于非常大的数据集是不切实际的。
+
+能否能够降低一定的精度来平衡存储空间？Redis推出了HyperLogLog
+
+Redis HyperLogLog 是用来做基数统计的算法，HyperLogLog 的优点是，在输入元素的数量或者体积非常非常大时，计算基数所需的空间总是固定的、并且是很小的。
+
+在 Redis 里面，每个 HyperLogLog 键只需要花费 12 KB 内存，就可以计算接近 2^64 个不同元素的基数。这和计算基数时，元素越多耗费内存就越多的集合形成鲜明对比。
+
+但是，因为 HyperLogLog 只会根据输入元素来计算基数，而不会储存输入元素本身，所以 HyperLogLog 不能像集合那样，返回输入的各个元素。
+
+什么是基数?
+
+比如数据集 {1, 3, 5, 7, 5, 7, 8}， 那么这个数据集的基数集为 {1, 3, 5 ,7, 8}, 基数(不重复元素)为5。 基数估计就是在误差可接受的范围内，快速计算基数。
 
 ### 6.2.2、命令
 
+```sh
+# 添加指定元素到HyperLogLog ,添加成功返回1，失败返回0
+pfadd key element1 [element2 ...]
 
+# 计算HyperLogLog（HLL）的近似基数，可以计算多个HLL，比如用HLL存储每天的UV独立访问者（去重），计算一周的UV可以使用7天的UV合并计算即可
+pfcount key1 [key2 ...]
+
+# 将一个或多个HLL合并后的结果存储在destkey（HLL类型）,原来的sourcekey依旧存在，用处：如每月活跃用户可以使用每天的活跃用户合并计算
+pfmerge destkey sourcekey1 [sourcekey2 ...]
+```
 
 ## 6.3、Geospatial
 
 ### 6.3.1、简介、
 
-
+Redis 3.2 中增加了对GEO类型的支持。GEO，Geographic，地理信息的缩写。该类型，就是元素的2维坐标，在地图上就是经纬度。redis基于该类型，提供了经纬度设置，查询，范围查询，距离查询，经纬度Hash等常见操作。
 
 ### 6.3.2、命令
 
+```sh
+# 添加地理位置（经度，纬度，名称）,返回经纬度成员个数
+geoadd key longitude1 latitude1 member1 [longitude2 latitude2 member2]
 
+# 获取指定地区的坐标值
+geopos key member1 [member2]
 
-# 7、
+# 获取两个位置之间的直线距离,m表示米，km表示千米，mi表示英尺，ft表示英尺（默认是m）
+geodist key member1 member2 [m|km|ft|mi]
+
+# 以给定的经纬度为中心，找出key集合中存在某一半径内的元素（经度，纬度，半径，单位）
+georadius key longitude latitude radius [m|km|ft|mi]
+```
+
+> **geoadd命令**：
+>
+> 两极无法直接添加，一般会下载城市数据，直接通过 Java 程序一次性导入。
+>
+> 有效的经度从 -180 度到 180 度。有效的纬度从 -85.05112878 度到 85.05112878 度。
+>
+> 当坐标位置超出指定范围时，该命令将会返回一个错误。
+>
+> 已经添加的数据，是无法再次往里面添加的。
+
+# 7、Jedis操作Redis6
 
 
 
