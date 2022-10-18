@@ -558,8 +558,8 @@ bind 127.0.0.1 -::1
 默认只支持本机访问
 
 ```sh
-# protected-mode no 允许远程访问
-protected-mode yes
+# protected-mode no （关闭保护模式）允许远程访问
+protected-mode yes # 开启保护模式
 ```
 
 > ```sh
@@ -1039,9 +1039,109 @@ georadius key longitude latitude radius [m|km|ft|mi]
 
 # 7、Jedis操作Redis6
 
+## 7.1、连接准备工作
+
+### 7.1.1、修改redis配置文件
+
++ 如果是跨IP连接，则`redis.conf`中必须添加目标ip。或直接将bind注销掉，表示允许所有连接。
+
+  ```sh
+  # 否则能telnet通端口但是连接不上redis
+  # bind 127.0.0.1 -::1
+  ```
+
++ 如果是跨IP连接，则`redis.conf`中关闭保护模式。
+
+  ```sh
+  # 默认是yes，表示只允许本机访问
+  protected-mode no
+  ```
+
++ 必须Linux关闭防火墙，或者将端口`6379`放行。
+
+### 7.1.2、引入Jedis的依赖
+
+```xml
+<dependency>
+    <groupId>redis.clients</groupId>
+    <artifactId>jedis</artifactId>
+    <version>3.2.0</version>
+</dependency>
+```
 
 
-# 8、
+
+## 7.2、测试相关数据类型
+
+部分方法，详细方法参考官方文档。
+
+### 7.2.1、Jedis-API ：Key
+
+```java
+jedis.get("key");
+List<String> list = jedis.keys("*");//获取所有的key
+```
+
+### 7.2.2、Jedis-API：String
+
+```java
+String s = jedis.mset("k1", "v1", "k2", "v2"); //返回jedis的状态码 ok 正常
+List<String> mget = jedis.mget("k1", "k2");
+```
+
+### 7.2.3、Jedis-API：List
+
+```java
+jedis.lpush("key1", "lucy", "mary", "jack","张三");
+List<String> list = jedis.lrange("key1", 0, -1);
+```
+
+### 7.2.4、Jedis-API：Set
+
+```java
+jedis.sadd("key_set", "c", "c++", "php");
+Set<String> key_set = jedis.smembers("key_set");
+```
+
+### 7.2.5、Jedis-API：Hash
+
+```java
+HashMap<String,String> map = new HashMap<>();
+map.put("name","张三");
+map.put("age","18");
+jedis.hset("key_hash_1","type","hash");
+jedis.hset("person",map);
+
+Set<String> personKeys = jedis.hkeys("person");
+List<String> personVals = jedis.hvals("person");
+```
+
+### 7.2.6、Jedis-API：Zset
+
+```java
+HashMap<String, Double> map = new HashMap<>();
+map.put("重庆",3d);
+map.put("武汉",4d);
+jedis.zadd("city",0d,"上海");
+jedis.zadd("city",1d,"深圳");
+jedis.zadd("city",map);
+
+Set<Tuple> city = jedis.zrangeWithScores("city", 0, -1);//tuple双重数组
+```
+
+## 7.3、Jedis实例-手机验证码
+
+**要求：**
+
++ 输入手机号，点击发送后随机生成6位数字码，2分钟有效。
++ 输入验证码，点击验证，返回成功或失败
++ 每个手机号每天只能发送/生成3次验证码
+
+
+
+# 8、Redis6和SpringBoot整合
+
+
 
 
 
