@@ -66,6 +66,7 @@ public class VerifyServlet extends HttpServlet {
                 jedis.set(mobile,"exists");//用来标记该手机号似否存在
                 jedis.set(mobile + ":verify", MessageAPIUtil.getVerify());
                 jedis.set(mobile + ":count","1");
+                //不需要设置mobile + ":verify"的过期时间，因为当主键mobile过期后，重新给mobile + ":verify"赋值会被覆盖掉，所以不需要设置过期时间
                 jedis.expire(mobile,24*60*60);//24h过期
                 jedis.expire(mobile + ":verify",120);//2m过期
             }
