@@ -1,0 +1,20 @@
+spring:
+  redis:
+    host: 192.168.77.3
+    password: 1024
+    # redis客户端连接类型是lettuce 还是jedis
+    client-type: lettuce
+    client-name: springboot_redis
+    # 配置redis线程连接池
+    lettuce:
+      pool:
+        # 启用线程池
+        enabled: true
+        # 连接池中最大空闲连接
+        max-idle: 8
+        # 最大阻塞等待时间（-1永不超时）
+        max-wait: -1
+        # 连接池最大连接数 负数表示没限制
+        max-active: 8
+        # 连接池中最小空闲连接
+        min-idle: 0

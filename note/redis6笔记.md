@@ -1137,17 +1137,145 @@ Set<Tuple> city = jedis.zrangeWithScores("city", 0, -1);//tuple双重数组
 + 输入验证码，点击验证，返回成功或失败
 + 每个手机号每天只能发送/生成3次验证码
 
+<img src="img\image-20221026144642283.png">
 
+
+
+具体代码见：[jedis_demo](../jedis_demo)
 
 # 8、Redis6和SpringBoot整合
 
+使用Idea的Spring Initializer ，勾选nosql中springboot-redis即可。会自动导入redis依赖，并自动配置好两个redisTemplate模板。默认使用lettuce连接redis而不是jedis。
+
+```java
+//自动配置类RedisAutoConfiguration.class自动配置的redisTemplate （springboot版本为2.2.1）
+@Bean
+@ConditionalOnMissingBean(
+    name = {"redisTemplate"}
+)
+public RedisTemplate<Object, Object> redisTemplate(RedisConnectionFactory redisConnectionFactory) throws UnknownHostException {
+    RedisTemplate<Object, Object> template = new RedisTemplate();
+    template.setConnectionFactory(redisConnectionFactory);
+    return template;
+}
+
+@Bean
+@ConditionalOnMissingBean
+public StringRedisTemplate stringRedisTemplate(RedisConnectionFactory redisConnectionFactory) throws UnknownHostException {
+    StringRedisTemplate template = new StringRedisTemplate();
+    template.setConnectionFactory(redisConnectionFactory);
+    return template;
+}
+```
+
+```JAVA
+//导入的LettuceConnectionConfiguration.class默认添加的连接工厂
+@Bean
+@ConditionalOnMissingBean({RedisConnectionFactory.class})
+LettuceConnectionFactory redisConnectionFactory(ObjectProvider<LettuceClientConfigurationBuilderCustomizer> builderCustomizers, ClientResources clientResources) throws UnknownHostException {
+    LettuceClientConfiguration clientConfig = this.getLettuceClientConfiguration(builderCustomizers, clientResources, this.getProperties().getLettuce().getPool());
+    return this.createLettuceConnectionFactory(clientConfig);
+}
+```
+
+```yaml
+# springboot中redis的自动配置
+spring:
+  redis:
+    host: 192.168.77.3
+    password: 1024
+    # redis客户端连接类型是lettuce 还是jedis
+    client-type: lettuce
+    client-name: springboot_redis
+    # 配置redis线程连接池
+    lettuce:
+      pool:
+        # 启用线程池
+        enabled: true
+        # 连接池中最大空闲连接
+        max-idle: 8
+        # 最大阻塞等待时间（-1永不超时）
+        max-wait: -1
+        # 连接池最大连接数 负数表示没限制
+        max-active: 8
+        # 连接池中最小空闲连接
+        min-idle: 0
+```
+
+测试即可：
+
+```java
+@SpringBootTest
+class RedisSpringbootDemoApplicationTests {
+
+    @Autowired
+    private StringRedisTemplate stringRedisTemplate;
+
+    @Test
+    void contextLoads() {
+        String s = stringRedisTemplate.opsForValue().get("15195464589:count");
+        System.out.println(s);
+        stringRedisTemplate.opsForValue().set("hello","ly");
+    }
+
+}
+```
+
+# 9、Redis6的事务\_锁机制\_秒杀
+
+## 9.1、Redis中的事务定义
+
+   <img src='img\image-20221026162953461.png'>                
+
+Redis事务是一个单独的隔离操作：事务中的所有命令都会序列化、按顺序地执行。事务在执行的过程中，不会被其他客户端发送来的命令请求所打断。
+
+<font color='red'>Redis事务的主要作用就是串联多个命令防止别的命令插队。</font>
+
+## 9.2、事务操作的三个命令：Multi、Exec、discard、watch
+
+**注意：`Redis Watch 命令用于监视一个(或多个) key ，如果在事务执行之前这个(或这些) key 被其他命令所改动，那么事务将被打断`**
+
+从输入Multi命令开始，输入的命令都会依次进入命令队列中，但不会执行，直到输入Exec后，Redis会将之前的命令队列中的命令依次执行（先入先执行）。
+
+组队的过程中可以通过<font color='red'>discard来放弃组队（只能在组队时操作，exec后没有用）。</font>
+
+<img src='img\image-20221026163920603.png'>
+
+<img src="img\image-20221026164559662.png">
+
+<img src='img\image-20221026164754335.png'>
 
 
 
+***Redis事务的错误种类：***
 
-# 9、Redis6的事务操作
+==**redis事务中没有隔离级别的 概念（不同于mysql）**==
+
+==**redis命令具有原子性，但是redis事务没有原子性**==
+
+* **编译时出现的错误，则队列中的所有命令均不会执行**
+
+  <img src='img\image-20221026165715943.png'>
+
+* **运行时出现的逻辑错误，则队列中只有该条命令执行失败，其余的正常命令均会执行成功**
+
+  <img src='img\image-20221026165901704.png'>
+
+  
+
+## 9.3、事务的错误处理
 
 
+
+## 9.4、为什么要做成事务
+
+
+
+## 9.5、事务冲突的问题
+
+
+
+## 9.6、Redis事务三特性
 
 # 10、Redis6持久化之RDB
 
