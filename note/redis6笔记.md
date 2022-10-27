@@ -1,4 +1,4 @@
-# 前言
+前言
 
 详细文档参考：
 
@@ -1245,9 +1245,7 @@ Redis事务是一个单独的隔离操作：事务中的所有命令都会序列
 
 <img src='img\image-20221026164754335.png'>
 
-
-
-***Redis事务的错误种类：***
+## 9.3、事务的错误处理
 
 ==**redis事务中没有隔离级别的 概念（不同于mysql）**==
 
@@ -1263,25 +1261,451 @@ Redis事务是一个单独的隔离操作：事务中的所有命令都会序列
 
   
 
-## 9.3、事务的错误处理
-
-
-
 ## 9.4、为什么要做成事务
 
-
+想想一个场景：有很多人有你的账户,同时去参加双十一抢购
 
 ## 9.5、事务冲突的问题
 
+### 9.5.1、例子
 
+一个请求想给金额减8000
+
+一个请求想给金额减5000
+
+一个请求想给金额减1000
+
+<img src='img\image-20221027092419694.png' >
+
+
+
+***针对上面例子出现的问题，有两种解决机制：悲观锁+乐观锁***
+
+### 9.5.2、悲观锁
+
+<img src='img\image-20221027092830990.png'>
+
+<font color='red'>**悲观锁(Pessimistic Lock)**</font>，顾名思义就是很悲观。每次去拿数据的时候都认为别人会修改，所有每次在拿数据时候都会上锁，这样别人想拿这个数据就会block直到它拿到锁。<font color='red'>**传统的关系型数据库里面就用到了很多这种锁机制**</font>，比如：<font color='red'>行锁、锁表等，读锁、写锁等</font>，都是在做操作之前先上锁。
+
+### 9.5.3、乐观锁
+
+<img src='img\image-20221027093517890.png'>
+
+<font color='red'>**乐观锁(Optimistic Lock)**</font>，顾名思义就是很乐观。每次去拿数据的时候都认为别人不会修改数据，所以不会上锁，但是在更新的时候会判断一下在此期间别人有没有去更新这个数据（比如版本version），可以使用版本号等机制。<font color='red'>**乐观锁适用于多读的应用类型，这样可以提高吞吐量。**Redis就是利用这种`check-and-set`机制实现事物的</font>
+
+```java
+//实现乐观锁
+watch + multi
+```
+
+
+
+### 9.5.4、watch key [key ...]
+
+在执行multi之前，先执行watch key1[key2...]，可以监视一个或多个key，<font color='yellow'>如果在事务执行之前这个或这些key被其他命令所改动，那么事务将会被打断。</font>
+
+### 9.5.5、unwatch
+
+取消 WATCH 命令对所有 key 的监视。
+
+如果在执行 WATCH 命令之后，EXEC 命令或DISCARD 命令先被执行了的话，那么就不需要再执行UNWATCH 了。
+
+http://doc.redisfans.com/transaction/exec.html
 
 ## 9.6、Redis事务三特性
 
-# 10、Redis6持久化之RDB
++ **单独的隔离操作**
+
+  > 事务中的所有命令都会序列化、按照顺序执行。事务在执行的过程中，不会被其他客户端发来的命令请求所打断。
+
++ **没有隔离级别的概念**
+
+  > 队列中的命令没有提交之前都不会实际的被执行，因为事务提交前任何指令都不回被实际执行。
+
++ **不保证原子性**
+
+  > 事务中如果有一条命令执行失败，其后的命令仍然会被执行，没有回滚。
+
+# 10、Redis事务_秒杀案例
+
+## 10.1、解决计数器和人员记录的事务操作
+
+<img src='img\image-20221027100200773.png'>
+
+## 10.2、Redis事务--秒杀并发模拟
+
+使用工具ab模拟测试
+
+centos6默认安装了
+
+centos7需要手动安装
+
+### 10.2.1、联网下安装
+
+> `yum install httpd-tools`
+
+### 10.2.2、离线安装
+
+> （1） 进入cd /run/media/root/CentOS 7 x86_64/Packages（路径跟centos6不同）
+>
+> （2） 顺序安装
+>
+> apr-1.4.8-3.el7.x86_64.rpm
+>
+> apr-util-1.5.2-6.el7.x86_64.rpm
+>
+> httpd-tools-2.4.6-67.el7.centos.x86_64.rpm 
+
+### 10.2.3、测试及结果
+
+#### 10.2.3.1、通过ab测试
+
+vim postfile 模拟表单提交参数,以&符号结尾;存放当前目录。
+
+内容：prodid=0101&
+
+ab -n 2000 -c 200 -k -p ~/postfile -T application/x-www-form-urlencoded http://192.168.2.115:8081/Seckill/doseckill
+
+#### 10.2.3.2、超卖和redis连接超时
+
+如果不使用java多线程synchronized，会产生超卖。
+
+如果不适用redis连接池，高并发下会产生连接超时问题。
+
+<img src='img\image-20221027135210586.png'>
+
+## 10.3、超卖问题
+
+<img src='img\image-20221027140440693.png'>
 
 
 
-# 11、Redis6持久化之AOF
+## 10.4、不使用Java多线程synchronized，使用乐观锁淘汰用户，解决超卖问题。
+
+<img src='img\image-20221027141152838.png'>
+
+
+
+```java
+//watch + multi 是乐观锁 （必须最好放在redis操作之前就观察，提高准确率，如果放在multi前还是会超卖）
+jedis.watch(sk_prodId_qt);
+
+...
+    
+//使用redis乐观锁，解决超卖问题
+if (Integer.parseInt(jedis.get(sk_prodId_qt)) < 1) {
+   log.info("商品已经秒杀结束！");
+   return false;
+} else {
+	
+    //jedis.watch(sk_prodId_qt);//如果只在这一步观察还是会超卖i的
+   //使用乐观锁，其实就是 watch + multi
+   Transaction multi = jedis.multi();
+   multi.decr(sk_prodId_qt);
+   multi.sadd(sk_prodId_usr, uid);
+   List<Object> exec = multi.exec();
+   //判断redis事务是否提交
+   if (exec == null||exec.size()==0) {
+      log.info("商品秒杀失败！");
+      return false;
+   }
+   log.info("用户 uid=" + uid + "，秒杀成功！");
+}
+```
+
+## 10.4、使用Java多线程synchronized，不使用乐观锁淘汰用户，解决超卖问题。
+
+```java
+//6.判断库存数量，如果小于1，则秒杀结束
+synchronized (obj) {
+   if (Integer.parseInt(jedis.get(sk_prodId_qt)) < 1) {
+      log.info("商品已经秒杀结束！");
+      return false;
+   } else {
+      //如果不是Java加锁了，redis光有事务，没有乐观锁也不行
+      Transaction multi = jedis.multi();
+      multi.decr(sk_prodId_qt);
+      multi.sadd(sk_prodId_usr, uid);
+      multi.exec();
+      log.info("用户 uid=" + uid + "，秒杀成功！");
+   }
+}
+```
+
+## 10.5、继续增加并发测试
+
+### 10.5.1、连接有限制
+
+`ab -n 3000 -c 200 -p postfile -T application/x-www-form-urlencoded http://192.168.77.1:8080/seckill/doseckill`
+
+<img src='img\image-20221027145030155.png'>
+
+增加-r参数，-r  Don't exit on socket receive errors.
+
+`ab -n 2000 -c 100 -r -p postfile -T 'application/x-www-form-urlencoded' http://192.168.77.1:8080/seckill/doseckill`·
+
+### 10.5.2、已经秒光，可是还有库存
+
+**乐观锁遗留的问题，高并发，但是总请求量少时会产生 提示卖光但是库存还有的情况。**
+
+<img src='img\image-20221027145216699.png'>
+
+> 已经秒光，可是还有库存。原因，就是乐观锁导致很多请求都失败。先点的没秒到，后点的可能秒到了。
+
+### 10.5.3、连接超时，可以使用reids连接处解决
+
+<img src='img\image-20221027135932181.png'>
+
+### 10.5.4、连接池
+
++ 节省每次连接redis服务带来的消耗，把连接好的实例反复利用。
+
++ 通过参数管理连接的行为
+
+代码见项目中
+
+> l**链接池参数:**
+>
+> + MaxTotal：控制一个pool可分配多少个jedis实例，通过pool.getResource()来获取；如果赋值为-1，则表示不限制；如果pool已经分配了MaxTotal个jedis实例，则此时pool的状态为exhausted。
+> + maxIdle：控制一个pool最多有多少个状态为idle(空闲)的jedis实例；
+> + MaxWaitMillis：表示当borrow一个jedis实例时，最大的等待毫秒数，如果超过等待时间，则直接抛JedisConnectionException；
+> + testOnBorrow：获得一个jedis实例的时候是否检查连接可用性（ping()）；如果为true，则得到的jedis实例均是可用的；
+
+```java
+// redis连接池源码如下
+public class JedisPoolUtil {
+   private static volatile JedisPool jedisPool = null;
+
+   private JedisPoolUtil() {
+   }
+
+   public static JedisPool getJedisPoolInstance() {
+      if (null == jedisPool) {
+         synchronized (JedisPoolUtil.class) {
+            if (null == jedisPool) {
+               JedisPoolConfig poolConfig = new JedisPoolConfig();
+               poolConfig.setMaxTotal(200);//总连接数
+               poolConfig.setMaxIdle(32);//每个连接池最大空闲连接数
+               poolConfig.setMaxWaitMillis(100*1000);//最大等待时间
+               poolConfig.setBlockWhenExhausted(true);
+               poolConfig.setTestOnBorrow(true);  // ping  PONG
+             
+               jedisPool = new JedisPool(poolConfig, "192.168.77.3", 6379, 60000 );
+            }
+         }
+      }
+      return jedisPool;
+   }
+   //将redis连接返回给连接池即释放
+   public static void release(JedisPool jedisPool, Jedis jedis) {
+      if (null != jedis) {
+         jedisPool.returnResource(jedis);
+      }
+   }
+
+}
+```
+
+
+
+## 10.6、解决库存遗留为问题
+
+### 10.6.1、LUA脚本
+
+<img src='img\image-20221027145516396.png'>
+
+Lua 是一个小巧的[脚本语言](http://baike.baidu.com/item/脚本语言)，Lua脚本可以很容易的被C/C++ 代码调用，也可以反过来调用C/C++的函数，Lua并没有提供强大的库，一个完整的Lua解释器不过200k，所以Lua不适合作为开发独立应用程序的语言，而是作为<font color='red'>嵌入式脚本语言。</font>
+
+很多应用程序、游戏使用LUA作为自己的嵌入式脚本语言，以此来实现可配置性、可扩展性。
+
+这其中包括魔兽争霸地图、魔兽世界、博德之门、愤怒的小鸟等众多游戏插件或外挂。
+
+https://www.w3cschool.cn/lua/
+
+### 10.6.2、LUA脚本在Redis中的优势
+
+**将复杂的或者多步的redis操作，写为一个脚本，一次提交给redis执行，减少反复连接redis的次数。提升性能。**
+
++ <font color='yellow'>LUA脚本是类似redis事务，有一定的原子性，不会被其他命令插队，可以完成一些redis事务性的操作。</font>
++ 但是注意redis的lua脚本功能，只有在Redis 2.6以上的版本才可以使用。
+
+利用lua脚本淘汰用户，解决超卖问题。
+
+redis 2.6版本以后，通过lua脚本解决**争抢问题**，实际上是**redis** **利用其单线程的特性，用任务队列的方式解决多任务并发问题**。
+
+<img src='img\image-20221027150104831.png'>
+
+### 10.6.3、LUA脚本
+
+```lua
+local userid=KEYS[1]; 
+local prodid=KEYS[2]; -- 定义两个参数
+local qtkey="sk:"..prodid..":qt";
+local usersKey="sk:"..prodid..":usr"; -- 拼接key
+local userExists=redis.call("sismember",usersKey,userid); -- 直接调用redis命令
+if tonumber(userExists)==1 then 
+  return 2; -- 返回该用户已经参加过秒杀，且秒杀成功
+end
+local num= redis.call("get" ,qtkey);
+if tonumber(num)<=0 then 
+  return 0;  -- 返回秒杀结束
+else 
+  redis.call("decr",qtkey);
+  redis.call("sadd",usersKey,userid);
+end
+return 1; -- 返回成功
+```
+
+```java
+// 增加lua脚本后的 java
+static String secKillScript ="local userid=KEYS[1];\r\n" + 
+      "local prodid=KEYS[2];\r\n" + 
+      "local qtkey='sk:'..prodid..\":qt\";\r\n" + 
+      "local usersKey='sk:'..prodid..\":usr\";\r\n" + 
+      "local userExists=redis.call(\"sismember\",usersKey,userid);\r\n" + 
+      "if tonumber(userExists)==1 then \r\n" + 
+      "   return 2;\r\n" + 
+      "end\r\n" + 
+      "local num= redis.call(\"get\" ,qtkey);\r\n" + 
+      "if tonumber(num)<=0 then \r\n" + 
+      "   return 0;\r\n" + 
+      "else \r\n" + 
+      "   redis.call(\"decr\",qtkey);\r\n" + 
+      "   redis.call(\"sadd\",usersKey,userid);\r\n" + 
+      "end\r\n" + 
+      "return 1" ;  //这就是上面的lua脚本
+public static boolean doSecKill(String uid,String prodid) throws IOException {
+
+   JedisPool jedispool =  JedisPoolUtil.getJedisPoolInstance();
+   Jedis jedis=jedispool.getResource();
+
+    //String sha1=  .secKillScript; //redis执行lua脚本
+   String sha1=  jedis.scriptLoad(secKillScript);
+   Object result= jedis.evalsha(sha1, 2, uid,prodid);
+
+   String reString=String.valueOf(result);
+   if ("0".equals( reString )  ) {
+      logger.info("已抢空！！");
+   }else if("1".equals( reString )  )  {
+      logger.info("抢购成功！！！！");
+   }else if("2".equals( reString )  )  {
+      logger.info("该用户已抢过！！");
+   }else{
+      logger.error("抢购异常！！");
+   }
+   jedis.close();
+   return true;
+}
+```
+
+其实就是将java中的逻辑判断部分，放到redis中去执行，减少redis连接次数提高了性能。
+
+又因为lua脚本是队列排队的，所以类似于Java的多线程`synchronized`
+
+# 11、Redis6持久化
+
+**总体介绍**
+
+官网介绍：http://www.redis.io
+
+<img src='img\image-20221027153441968.png'>
+
+**Redis 提供了2个不同形式的持久化方式。**
+
++ **RDB**（Redis DataBase）
++ **AOF**（Append Of File）
+
+# 12、RDB（Redis DataBase）
+
+## 12.1、官网介绍
+
+<img src='img\image-20221027153633712.png'>
+
+## 12.2、是什么
+
+在**指定的时间间隔内**将**内存**中的**数据集快照写入磁盘**，也就是行话讲的Snapshot快照，它恢复时是将快照文件直接读到内存中的。
+
+## 12.3、备份是如何执行的
+
+**Redis会单独创建(fork)一个子进程来进行持久化，会先将数据写入到一个临时文件中，待持久化过程都结束了，再将这个临时文件中输入替换并写入到dump.rdb（默认的持久化文件名）中。**
+
+整个过程中，主进程是不进行任何IO操作的，这就确保了极高的性能。如果需要进行大规模数据的恢复，且对于数据恢复的完整性不是非常敏感，那RDF方式要比AOF方式更加高效。
+
+**RDB的缺点是：最后一次持久化的数据可能丢失。（就是持久化过程后中临时文件覆盖dump.rdb新写入的）**
+
+## 12.4、Fork
+
++ Fork的作用是**复制一个与当前进程一样的进程。新进程的所有数据（变量、环境变量、程序计数器等）数值和原进程一致，但是是一个全新的进程，并作为原进程的子进程**。
++ 在Linux系统中，fork()会产生一个和父进程完全相同的子进程，但子进程在此后多会exec系统调用，处于效率考虑，Linux引入写时复制技术
++ 一般情况下父进程和子进程会共用同一段物理内存，只有进程空间的各段的内容要发生变化时，才会将父进程的内容复制一份给子进程。
+
+
+
+## 12.5、RDB持久化流程
+
+<img src='img\image-20221027155814756.png'>
+
+## 12.6、dump.rdb文件
+
+在redis中，默认开启RDB持久化，且文件名为：dump.rdb
+
+<img src='img\image-20221027160521703.png'>
+
+## 12.7、rdb文件存放位置
+
+rdb文件的保存路径，也可以修改。默认为Redis启动时命令行所在的目录下 （在那个目录启动，就在那个目录下）
+
+<img src='img\image-20221027160659315.png'>
+
+## 12.8、redis.conf
+
+```sh
+# ============== 保存rdb快照 =================
+# 格式：save 秒钟 写操作次数 
+# 默认是1分钟内改了10000个key变化，或5分钟内100个key变化，或1个小时内1个key变化 （同一个key变化不算）
+# 默认禁用 （注释掉或赋值为空）
+save 20 3 # 20秒内如果有3个key发生变化，就记录，那么第4个key重新从0秒开始算
+
+# save时只管保存，其它不管，会导致操作全部阻塞。手动保存。不建议。
+# bgsave：Redis会在后台异步子进程进行快照操作， 快照同时还可以响应客户端请求，备份完后退出bgsave格式：bgsave
+# 可以通过lastsave 命令获取最后一次成功执行快照的时间
+bgsave
+
+# 执行flushall命令，也会产生dump.rdb文件，但里面是空的，无意义
+
+# 当磁盘空间不足时，不会继续写入dump.rdb
+stop-writes-on-bgsave-error yes
+# 开启rdb压缩，如果是的话，redis会采用LZF算法进行压缩。
+rdbcompression yes
+# 在存储快照后，还可以让redis使用CRC64算法来进行数据校验，
+rdbchecksum yes
+dbfilename dump.rdb
+rdb-del-sync-files no
+dir ./
+
+```
+
+## 12.9、如何备份dump.rdb和恢复
+
++ **备份：**直接将dump.rdb拷贝即可
++ **恢复：**直接将要恢复的dump.rdb拷贝到要启动的目录下即可（<font color='yellow'>默认不是看程序在哪个目录，而是看你在哪个目录下启动就保存在哪个目录下</font>）
+
+## 12.10、RDB优势
+
++ 适合大规模的数据恢复 （与AOF比较）
++ 对数据完整性和一致性要求不高的更适合使用
++ 节省磁盘空间
++ 恢复速度快
+
+<img src='img/image-20221027165110423.png'>
+
+## 12.11、RDB劣势
+
++ Fork的时候，内存中的数据被克隆了一份，内存占用大致2倍的膨胀
++ 虽然Redis在fork时使用了写时复制技术，但是如果数据比较庞大时还是比较消耗性能。
++ 备份周期时是在一段时间间隔内做备份，所以如果Redis出现意外则会丢失最后一次快照之后的所以修改。
+
+# 13、AOF
 
 
 
