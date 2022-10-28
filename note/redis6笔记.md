@@ -1868,6 +1868,88 @@ AOF的备份机制和性能虽然和RDB不同，但是**备份和恢复的操作
 
 # 14、Redis6的主从复制
 
+## 14.1、是什么
+
+主机数据更新后根据配置和策略，自动同步到备机的<font color='red'> **master/slaver机制，Master以写为主，Slave以读为主**</font>。
+
+## 14.2、能干嘛
+
++ 读写分离，性能扩展
++ 容灾快速恢复（主从切换，从从切换）
+
+<img src='img\image-20221028110330175.png'>
+
+## 14.3、怎么用：主从复制
+
+搭建一主两从
+
++ 创建myredis目录
+
++ 将redis.conf复制到myredis目录
+
++ 创建三个配置文件（一主两从）
+
+  > + redis6379.conf ：主
+  > + redis6380.conf ：从
+  > + redis6381.conf ：从
+
++ 每个配置文件单独配置
+
+  > + redis6379.conf 
+  >
+  >   ```sh
+  >   # 引入原生的redis.conf（未开启aof）
+  >   include /home/ly/program/myredis/redis.conf
+  >   # 会覆盖原生的配置
+  >   pidfile /var/run/redis_6379.pid
+  >   port 6379
+  >   dbfilename dump6379.rdb
+  >   loglevel debug
+  >   logfile "/home/ly/program/redis-6.2.1/redis6379.log"
+  >   ```
+  >
+  > + redis6380.conf修改端口和pidfile
+  >
+  >   ```sh
+  >   # 引入原生的redis.conf（未开启aof）
+  >   include /home/ly/program/myredis/redis.conf
+  >   # 会覆盖原生的配置
+  >   pidfile /var/run/redis_6380.pid
+  >   port 6380
+  >   dbfilename dump6380.rdb
+  >   loglevel debug
+  >   logfile "/home/ly/program/redis-6.2.1/redis6380.log"
+  >   ```
+  >
+  > + redis6381.conf修改端口和pidfile
+  >
+  >   ```sh
+  >   # 引入原生的redis.conf（未开启aof）
+  >   include /home/ly/program/myredis/redis.conf
+  >   # 会覆盖原生的配置
+  >   pidfile /var/run/redis_6381.pid
+  >   port 6381
+  >   dbfilename dump6381.rdb
+  >   loglevel debug
+  >   logfile "/home/ly/program/redis-6.2.1/redis6381.log"
+  >   ```
+
++ 
+
+
+
+## 14.4、主从复制的常用三招
+
+
+
+
+
+## 14.5、复制原理
+
+
+
+## 14.6、哨兵模式（sentinel）
+
 
 
 # 15、Redis6集群
