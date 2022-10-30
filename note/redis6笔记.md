@@ -1908,7 +1908,7 @@ AOF的备份机制和性能虽然和RDB不同，但是**备份和恢复的操作
   >   logfile "/home/ly/program/redis-6.2.1/redis6379.log"
   >   ```
   >
-  > + redis6380.conf修改端口和pidfile
+  > + redis6380.conf修改端口和pidfile，**配置主服务器地址和端口**
   >
   >   ```sh
   >   # 引入原生的redis.conf（未开启aof）
@@ -1919,9 +1919,11 @@ AOF的备份机制和性能虽然和RDB不同，但是**备份和恢复的操作
   >   dbfilename dump6380.rdb
   >   loglevel debug
   >   logfile "/home/ly/program/redis-6.2.1/redis6380.log"
+  >   # 配置主服务器地址和端口（当然也可以在命令行中输入，只不过重启失效）
+  >   slaveof 127.0.0.1 6379
   >   ```
   >
-  > + redis6381.conf修改端口和pidfile
+  > + redis6381.conf修改端口和pidfile，**配置主服务器和端口**
   >
   >   ```sh
   >   # 引入原生的redis.conf（未开启aof）
@@ -1932,21 +1934,219 @@ AOF的备份机制和性能虽然和RDB不同，但是**备份和恢复的操作
   >   dbfilename dump6381.rdb
   >   loglevel debug
   >   logfile "/home/ly/program/redis-6.2.1/redis6381.log"
+  >   # 配置主服务器地址和端口（当然也可以在命令行中输入，只不过重启失效）
+  >   slaveof 127.0.0.1 6379
   >   ```
 
-+ 
++ 分别启动6379,6380,6381端口的redis
+
+  > ```sh
+  > [root@localhost myredis]# /usr/local/bin/redis-server redis6379.conf 
+  > [root@localhost myredis]# /usr/local/bin/redis-server redis6380.conf 
+  > [root@localhost myredis]# /usr/local/bin/redis-server redis6381.conf 
+  > ```
+
++ 分别登陆6379,6380,6381端口的redis，查看redis服务信息
+
+  > ***`redis-cli -p prot` 连接指定端口的redis服务***
+  >
+  > ***`info replication`查看当前redis服务的replication信息***  （replication是复制的意思）
+  >
+  > ***`info`查看当前redis服务的所有信息***
+  >
+  > + 6379：主服务
+  >
+  >   ```sh
+  >   [root@localhost myredis]# /usr/local/bin/redis-cli -p 6379
+  >   127.0.0.1:6379> info replication
+  >   # Replication
+  >   role:master # 主服务
+  >   connected_slaves:2 # 从服务个数
+  >   slave0:ip=127.0.0.1,port=6380,state=online,offset=70,lag=1
+  >   slave1:ip=127.0.0.1,port=6381,state=online,offset=70,lag=1
+  >   master_failover_state:no-failover
+  >   master_replid:8b2de0e8353fd6dafd345444aabee7f241105312
+  >   master_replid2:0000000000000000000000000000000000000000
+  >   master_repl_offset:70
+  >   second_repl_offset:-1
+  >   repl_backlog_active:1
+  >   repl_backlog_size:1048576
+  >   repl_backlog_first_byte_offset:1
+  >   repl_backlog_histlen:70
+  >   ```
+  >
+  > + 6380：从服务
+  >
+  >   ```sh
+  >   [root@localhost myredis]# /usr/local/bin/redis-cli -p 6380
+  >   127.0.0.1:6380> info replication
+  >   # Replication
+  >   role:slave # 从服务
+  >   master_host:127.0.0.1 # 主服务地址
+  >   master_port:6379 # 主服务端口
+  >   master_link_status:up # 和主服务的连接是否通常
+  >   master_last_io_seconds_ago:2
+  >   master_sync_in_progress:0
+  >   slave_repl_offset:98
+  >   slave_priority:100
+  >   slave_read_only:1
+  >   connected_slaves:0
+  >   master_failover_state:no-failover
+  >   master_replid:8b2de0e8353fd6dafd345444aabee7f241105312
+  >   master_replid2:0000000000000000000000000000000000000000
+  >   master_repl_offset:98
+  >   second_repl_offset:-1
+  >   repl_backlog_active:1
+  >   repl_backlog_size:1048576
+  >   repl_backlog_first_byte_offset:1
+  >   repl_backlog_histlen:98
+  >   ```
+  >
+  > + 6381：从服务
+  >
+  >   ```sh
+  >   [root@localhost myredis]# /usr/local/bin/redis-cli -p 6381
+  >   127.0.0.1:6381> info replication
+  >   # Replication
+  >   role:slave
+  >   master_host:127.0.0.1
+  >   master_port:6379
+  >   master_link_status:up
+  >   master_last_io_seconds_ago:1
+  >   master_sync_in_progress:0
+  >   slave_repl_offset:490
+  >   slave_priority:100
+  >   slave_read_only:1
+  >   connected_slaves:0
+  >   master_failover_state:no-failover
+  >   master_replid:8b2de0e8353fd6dafd345444aabee7f241105312
+  >   master_replid2:0000000000000000000000000000000000000000
+  >   master_repl_offset:490
+  >   second_repl_offset:-1
+  >   repl_backlog_active:1
+  >   repl_backlog_size:1048576
+  >   repl_backlog_first_byte_offset:1
+  >   repl_backlog_histlen:490
+  >   ```
+
++ 测试（6379主机写入数据，6380和6381从机可以读取数据，成功！）
+
+  > **在从机上做写操作，会报错**
+  >
+  > ```sh
+  > 127.0.0.1:6381> set k1 v1
+  > (error) READONLY You cant write against a read only replica.
+  > ```
 
 
 
 ## 14.4、主从复制的常用三招
 
+### 14.4.1、一主二仆
+
++ 如果主机挂掉了，**重启主机即可**，从机会自动连接
+
+  > 记录的数据已经保存在主服务器上来
+
++ 如果从机挂掉了
+
+  + 从机配置文件配置了slaveof，则**重启从机即可** 
+
+    > 从机挂掉后主机新增的数据信息已经存在，因为存在主机上的，从机启动后会自动同步过来并保存下来
+
+  + 从机配置文件没有配置了slaveof，则**重启从机后，需要在其redis-cli中输入`slaveof 127.0.0.1 6379`命令**
+
+### 14.4.2、薪火相传
+
+上一台**Slave1**可以是下一个**Slave2**的**Master**,**Slave2**同样可以接受来自其他**Slaves**的连接和同步请求，这样做的好处就是有效减轻了主**Master1**的写压力，去中心化降低风险。
+
+**`slaveof ip port`指定连接主服务**
+
+> **6379(Master) --> 6381Slave/Master) -->6380(Slave)**
+>
+> ```sh
+> # 主master
+>     127.0.0.1:6379> info replication
+>     # Replication
+>     role:master
+>     connected_slaves:1
+>     slave0:ip=127.0.0.1,port=6381,state=online,offset=2884,lag=1 # 只有一个从机了
+>     master_failover_state:no-failover
+> # Slave1
+>     127.0.0.1:6381> info replication
+>     # Replication
+>     role:slave
+>     master_host:127.0.0.1
+>     master_port:6379 # 主
+>     ...
+>     slave0:ip=127.0.0.1,port=6380,state=online,offset=2912,lag=0 # 从
+>     master_failover_state:no-failover
+> # Slave2
+>     127.0.0.1:6380> info replication
+>     # Replication
+>     role:slave
+>     master_host:127.0.0.1
+>     master_port:6381
+>     master_link_status:up
+> ```
+>
+> 
+
+<font color='red'>**中途变更转向master的设置，会清除之前的所有数据（上一个master的），建议以后改变master先备份一下数据文件**</font>
 
 
 
+==***风险：***== 
+
++ **一但中间某个slave机器宕机，那么其后续的所有slave从机器都将会无法备份**
++ **主机挂了，从机也没办法新写入数据了
+
+<img src='img\image-20221030191128092.png' >
+
+### 14.4.3、反客为主
+
+**当唯一一台root级别的Master1服务挂掉了，那么后面紧跟其后的Slave1可以立刻晋升为Master成为根Master2，而其后面的Slave不需要做任何修改。**
+
+**`slaveof no noe`将从机变为主机（不写到配置文件中都是重启后失效）**
+
+> 6379服务宕机，6381变为master，6380什么都不做操作
+>
+> ```sh
+> # 6379宕机了
+>     127.0.0.1:6381> slaveof no one # 切换第一个slave6381为master
+>     OK
+>     127.0.0.1:6381> info replication
+>     # Replication
+>     role:master
+>     connected_slaves:1
+>     slave0:ip=127.0.0.1,port=6380,state=online,offset=3668,lag=0
+>     ...
+> 
+> # 6380
+>     127.0.0.1:6380> info replication
+>     # Replication
+>     role:slave
+>     master_host:127.0.0.1
+>     master_port:6381
+>     master_link_status:up
+>     ...
+> ```
 
 ## 14.5、复制原理
 
++ **Slave从服务器**启动成功后连接到**Master主服务器**后会发送一个**sync同步数据**的命令
 
+  > slave主动联系master仅这一次，以后每次数据更新都是master主动通知slave
+
++ Mster接到命令**启动后台的存盘进程（即数据持久化rdb文件）**，同时**收集**所有接受到的用于**修改数据集命令**，在**后台进程执行完毕后**，Master将传送**整个数据文件到Slave（rdb+aof），以完成一次完全同步**
+
++ **全量复制：**Slave服务在接受到数据库文件数据后，将其存盘并加载到内存中
+
++ **增量复制：**Master继续将新的所有收集到的修改命令依次传给slave，完成同步
+
++ 但是**只要重新连接master（有服务重启）**，一次完全同步（全量复制）将被自动执行
+
+<img src='img\image-20221030184941715.png'>
 
 ## 14.6、哨兵模式（sentinel）
 
