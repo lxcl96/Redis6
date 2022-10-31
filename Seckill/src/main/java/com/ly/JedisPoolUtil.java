@@ -3,6 +3,7 @@ package com.ly;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
 import redis.clients.jedis.JedisPoolConfig;
+import redis.clients.jedis.JedisSentinelPool;
 
 public class JedisPoolUtil {
 	private static volatile JedisPool jedisPool = null;
@@ -33,5 +34,6 @@ public class JedisPoolUtil {
 			jedisPool.returnResource(jedis);
 		}
 	}
+
 
 }
