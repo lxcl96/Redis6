@@ -1,10 +1,16 @@
+import com.ly.JedisClusterPoolUtil;
 import com.ly.JedisPoolUtil;
 import com.ly.JedisSentinelPoolUtil;
 import org.junit.Ignore;
 import org.junit.Test;
 import redis.clients.jedis.Jedis;
+import redis.clients.jedis.JedisCluster;
 import redis.clients.jedis.JedisPool;
 import redis.clients.jedis.JedisSentinelPool;
+
+import java.io.IOException;
+import java.util.Map;
+import java.util.function.Consumer;
 
 /**
  * FileName:TestSentinelPool.class
@@ -25,6 +31,18 @@ public class TestSentinelPool {
 
         System.out.println("hello:" + jedis.get("hello"));
         jedis.close();
+    }
+
+    @Test
+    public void testJedisCluster() throws IOException {
+        JedisCluster cluster = JedisClusterPoolUtil.getJedisCluster();
+        Map<String, JedisPool> clusterNodes = cluster.getClusterNodes();
+        clusterNodes.forEach((node,jedisPool) -> System.out.println(node + "=" + jedisPool));
+        System.out.println("k1: " + cluster.get("k1"));
+        System.out.println("k2: " + cluster.get("k2"));
+        System.out.println("person1_name: " + cluster.mget("name{person1}"));
+        System.out.println("person1: " + cluster.mget("{person1}")); //取不到值，必须是上面的方式 键{组}
+        cluster.close();
     }
 
 }

@@ -2373,11 +2373,345 @@ public class JedisSentinelPoolUtil {
 
 <img src='img/image-20221031163925089.png'>
 
-
-
 # 15、Redis6集群
 
+## 15.1、非集群遇到的问题
 
+容量不够，redis如何进行扩容？
+
+并发操作，redis如何分摊？
+
+<font color='red'>另外，主从模式，薪火相传模式，主机宕机，都会导致ip地址发生变化，应用程序中配置需要修改对应的主机地址、端口等信息</font>
+
+之前通过**代理主机**来解决，但是<font color='red'>redis3.0</font>中提供了解决方案。就是<font color='red'>**无中心化集群**</font>配置。
+
+<img src='img\04-集群简介.png'>
+
+
+
+## 15.2、什么是集群？
+
+Redis集群实现了对Redis的水平扩容（同一级别），即启动N个redis节点，将整个数据库分布存储在这N个节点中，每个节点存储总数据的 1/N。
+
+Redis集群通过分区（partition）来提供一定程度的可用性（availability）：即使集群中有一部分节点失效或无法进行通讯，集群也可以继续处理命令请求。
+
+## 15.3、删除持久化数据
+
+删除现有的RDB和AOF文件，为了更方便测试
+
+## 15.4、设置6个Redis实例，实现三主三从
+
+**约定：**
+
++ **6379（主）--->6389（从）**
++ **6380（主）--->6390（从）**
++ **6381（主）--->6391（从）**
+
+### 15.4.1、配置基本信息
+
+* **6379（主）和6389（从）**
+
+  > ```sh
+  > # redis6379.conf
+  > include /home/ly/program/myredis/redis.conf
+  > pidfile "/var/run/redis_6379.pid"
+  > port 6379
+  > dbfilename "dump6379.rdb"
+  > 
+  > # 配置集群，配置文件不要设置密码，等启动后通过集群命令设置
+  > # 开启集群
+  > cluster-enabled yes
+  > # 配置集群的节点配置文件(启动集群后自动生成)
+  > cluster-config-file nodes-6379.conf
+  > # 配置连接超时时间（单位毫米），超过了则自动主从切换
+  > cluster-node-timeout 15000
+  > ```
+  >
+  > ```sh
+  > # redis6389.conf
+  > include /home/ly/program/myredis/redis.conf
+  > pidfile "/var/run/redis_6389.pid"
+  > port 6389
+  > dbfilename "dump6389.rdb"
+  > 
+  > # 配置集群，配置文件不要设置密码，等启动后通过集群命令设置
+  > # 开启集群
+  > cluster-enabled yes
+  > # 配置集群的节点配置文件
+  > cluster-config-file nodes-6389.conf
+  > # 配置连接超时时间（单位毫米），超过了则自动主从切换
+  > cluster-node-timeout 15000
+  > ```
+
+* **6380（主）和6390（从）**
+
+  > ```sh
+  > # redis6380.conf
+  > include /home/ly/program/myredis/redis.conf
+  > pidfile "/var/run/redis_6380.pid"
+  > port 6380
+  > dbfilename "dump6380.rdb"
+  > 
+  > # 配置集群，配置文件不要设置密码，等启动后通过集群命令设置
+  > # 开启集群
+  > cluster-enabled yes
+  > # 配置集群的节点配置文件
+  > cluster-config-file nodes-6380.conf
+  > # 配置连接超时时间（单位毫米），超过了则自动主从切换
+  > cluster-node-timeout 15000
+  > ```
+  >
+  > ```sh
+  > include /home/ly/program/myredis/redis.conf
+  > pidfile "/var/run/redis_6390.pid"
+  > port 6390
+  > dbfilename "dump6390.rdb"
+  > 
+  > # 配置集群，配置文件不要设置密码，等启动后通过集群命令设置
+  > # 开启集群
+  > cluster-enabled yes
+  > # 配置集群的节点配置文件
+  > cluster-config-file nodes-6390.conf
+  > # 配置连接超时时间（单位毫米），超过了则自动主从切换
+  > cluster-node-timeout 15000
+  > ```
+
+* **6381（主）和6391（从）**
+
+  > ```sh
+  > # redis6381.conf
+  > include /home/ly/program/myredis/redis.conf
+  > pidfile "/var/run/redis_6381.pid"
+  > port 6381
+  > dbfilename "dump6381.rdb"
+  > 
+  > # 配置集群，配置文件不要设置密码，等启动后通过集群命令设置
+  > # 开启集群
+  > cluster-enabled yes
+  > # 配置集群的节点配置文件
+  > cluster-config-file nodes-6381.conf
+  > # 配置连接超时时间（单位毫米），超过了则自动主从切换
+  > cluster-node-timeout 15000
+  > ```
+  >
+  > ```sh
+  > # redis6391.conf
+  > include /home/ly/program/myredis/redis.conf
+  > pidfile "/var/run/redis_6391.pid"
+  > port 6391
+  > dbfilename "dump6391.rdb"
+  > 
+  > # 配置集群，配置文件不要设置密码，等启动后通过集群命令设置
+  > # 开启集群
+  > cluster-enabled yes
+  > # 配置集群的节点配置文件
+  > cluster-config-file nodes-6391.conf
+  > # 配置连接超时时间（单位毫米），超过了则自动主从切换
+  > cluster-node-timeout 15000
+  > ```
+
+### 15.4.2、依次启动六个redis服务
+
++ 六个redis服务均启动成功
+
+  <img src='img\image-20221101131800032.png'>
+
++ 确认redis启动目录（就是自己执行`redis-server redis.conf`时坐在的目录）下，**生成了6个服务对应的node-port.conf文件**
+
+  <img src='img\image-20221101132059626.png'>
+
+### 15.4.3、将这六个redis服务合并成一个集群
+
+如果是Redis6.2.1之前的版本，需要手动安装ruby环境。（之后自带，不需要手动安装）
+
++ **进入Redis6.2.1的解压后的目录（不是执行的目录），有个src目录**
+
+  <img src='img/image-20221101132515823.png'>
+
++ **进入src目录，确认里面已经有ruby环境（通过确认存在文件`redis-trib.rb`）**
+
++ **在当前的src目录下执行下面命令**
+
+  ```sh
+  # 1.--cluster create 表示创建集群服务
+  # 2.--cluster-replicas 1 表示创建集群，且每台机器由一个从机（配几个就是几个）
+  # 3.地址需要写真实ip，不能是127.0.0.1或localhost
+  redis-cli --cluster create --cluster-replicas 1 192.168.77.3:6379 192.168.77.3:6380 192.168.77.3:6381 192.168.77.3:6389 192.168.77.3:6390 192.168.77.3:6391
+  ```
+
+  <img src='img\image-20221101134101347.png'>
+
+  <img src='img\image-20221101134205021.png'>
+
+  > ***16384的含义*** ：见15.6中的slots
+
+### 15.4.4、测试登陆
+
++ **普通登陆**
+
+  > ```sh
+  > # 普通登陆方式，登录到指定6379的服务（不是集群的方式，无法使用无中性化模式）
+  > redis-cli -p 6379 
+  > ```
+
++ **集群登陆**
+
+  > ```sh
+  > # 集群方式登陆，-c 即可使用无中心化服务 即：登陆任意一台redis服务，都可以访问其余redis主机
+  > redis-cli -c -p 6379
+  > ```
+
+**使用`cluster nodes`查看当前集群下的节点信息**
+
+<img src='img\image-20221101135246012.png'>
+
+## 15.5、redis cluster是如何分配这6个节点的
+
++ <font color='red'>**一个集群中至少有3个主节点**</font>
++ 创建集群时的选项`--clustaer replicas 1` 表示**我们希望为集群中的每个主节点创建一个从节点**
++ 分配原则：<font color='red'>尽量保证每个主数据服务运行在不同的IP地址，每个从库和主库不在一个IP地址上</font>
+
+## 15.6、什么是slots(插槽)
+
+<img src='img\image-20221101134205021.png' style='zoom:80%'>
+
+slots即插槽，**一个Redis集群包含16384个插槽（hash slot），数据库中的每个键都属于这16384个插槽的其中一个**
+
+集群使用公式 <font color='red'>`CRC16(key)%16384`</font> 来计算键key属于哪个卡槽，其中 `CRC16(key)`是用于计算键key的CRC16校验和
+
+集群中的每个节点负责处理一部分插槽，比如当前服务是三台主机三台从机，通过`cluster nodes`查看节点：
+
+<img src='img\image-20221101141526370.png'>
+
+节点6379，负责`0-5460`号卡槽，
+
+节点6380，负责`5461-10922`号卡槽，
+
+节点6381，负责`10923-16383`号卡槽
+
+==**卡槽的设计目的就是为了：集群中各主机平均分摊键key**==
+
+## 15.7、在集群中存值
+
+redis-cli客户端提供了 <font color='red'>`-c` 参数实现自动重定向</font>
+
+在redis-cli每次录入、查询键值，redis都会计算出该key应该送往的插槽，如果不是该客户端对应的服务器插槽，redis就会告知应前往的redis实例地址和端口，并将其保存在对应数据库。
+
+<img src='img\image-20221101144114979.png'>
+
+<font color='red'>不在同一个插槽slot下，是不能使用mset和mget操作的 。</font>因为多个键值对的slot是不一样的
+
+<font color='red'>但是**可以通过{}来定义组的概念，从而使key中{}内相同内容的键值对放到一个slot中**去。</font>原理就是通过计算组的slot存值
+
+<img src='img\image-20221101144626307.png'>
+
+## 15.8、在集群中取值
+
++ **根据计算键key的slot取值（通过插槽取值，每个端口的数据库只能看在自己插槽范伟内的，不在的需要切换数据库）** 
+
+  <img src='img\image-20221101145323474.png'>
+
++ **直接取值**
+
+  <img src='img\image-20221101145501997.png'>
+
+<font color='yellow'>**总结：无论存值还是取值，都是通过计算键key的slot插槽值来确定数据库的位置，然后自动切换到对应数据库进行存取操作。**</font>
+
+## 15.9、集群故障恢复
+
++ 如果主节点下线了，从节点是否可以自动升为主节点（**可以**）？ 注意：**15s超时（配置文件配置的）**
+
+  > 如：6379服务停止，6389服务自动升级为主节点
+  >
+  > <img src='img\image-20221101150812732.png'>
+
++ 主节点恢复后，主从关系如何？ **原来的主节点变为从机**
+
+  > <img src='img\image-20221101151139233.png'>
+
++ 如果所有某一段插槽的主从节点都宕机了，redis服务还能继续吗？
+
+  > **看集群 redis.conf中配置 `cluster-require-full-coverage`参数**
+  >
+  > + 如果`cluster-require-full-coverage yes`，参数为yes，整个集群全部宕机
+  > + 如果`cluster-require-full-coverage no`，参数为no，整个集群除了宕机的slot插槽那段无法使用，其它的节点与其对应的slot插槽已经可以使用
+
+## 15.10、集群的Jedis开发
+
+Jedis即使连接的不是主机，集群会自动切换主机存储。主机写，从机读。
+
+无中心化主从集群，无论哪台主机写的数据，其他主机上都能读到数据
+
+***Jedis集群连接工具：**
+
+```java
+package com.ly;
+
+import redis.clients.jedis.HostAndPort;
+import redis.clients.jedis.JedisCluster;
+import redis.clients.jedis.JedisPoolConfig;
+
+/**
+ * FileName:JedisClusterUtil.class
+ * Author:ly
+ * Date:2022/11/1 0001
+ * Description: 集群的连接（无无密码）
+ */
+public class JedisClusterPoolUtil {
+    private static volatile JedisCluster jedisCluster = null;
+    private static final String host = "192.168.77.3";
+    private static final int port = 6379;
+
+    public static JedisCluster getJedisCluster() {
+        if (jedisCluster == null) {
+            synchronized(JedisPoolUtil.class) {
+                if (null == jedisCluster) {
+                    JedisPoolConfig jedisPoolConfig = new JedisPoolConfig();
+                    jedisPoolConfig.setMaxTotal(50);
+                    jedisPoolConfig.setMaxIdle(10);
+                    jedisPoolConfig.setMinIdle(10);
+                    jedisPoolConfig.setMaxWaitMillis(15000L);
+                    jedisPoolConfig.setTestOnBorrow(true);
+
+                    //等同于 redis-cli -c -p 6379
+                    //可以将HostAndPort 设置为set类型的HostAndPort，保证连接可用性
+                    jedisCluster = new JedisCluster(new HostAndPort(host,port),15000,jedisPoolConfig);
+                }
+            }
+        }
+        return jedisCluster;
+    }
+```
+
+**测试：**
+
+```java
+public void testJedisCluster() throws IOException {
+    JedisCluster cluster = JedisClusterPoolUtil.getJedisCluster();
+    Map<String, JedisPool> clusterNodes = cluster.getClusterNodes();
+    clusterNodes.forEach((node,jedisPool) -> System.out.println(node + "=" + jedisPool));
+    System.out.println("k1: " + cluster.get("k1"));
+    System.out.println("k2: " + cluster.get("k2"));
+    System.out.println("person1_name: " + cluster.mget("name{person1}"));
+    System.out.println("person1: " + cluster.mget("{person1}")); //取不到值，必须是上面的方式 键{组}
+    cluster.close();
+}
+```
+
+<img src='img\image-20221101160706175.png'>
+
+## 15.11、Redis集群的优点
+
++ 实现扩容
++ 分摊压力
++ 无中心化，配置相对简单
+
+## 15.12、Redis集群的缺点
+
++ 多键操作麻烦，需要借助组{}
++ 多键的事务不支持
++ lua脚本不支持
++ 由于集群方案出现较晚，很多公司已经采用了其他的集群方案，而代理或者客户端分片的方案想要迁移至redis cluster，需要整体迁移而不是逐步过渡，复杂度较大
 
 # 16、Redis6应用问题解决
 
