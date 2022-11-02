@@ -1,7 +1,7 @@
 spring:
   redis:
     host: 192.168.77.3
-    password: 1024
+#    password: 1024
     # redis客户端连接类型是lettuce 还是jedis
     client-type: lettuce
     client-name: springboot_redis
