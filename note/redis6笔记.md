@@ -2964,3 +2964,105 @@ redisTemplate.execute(redisScript, Arrays.asList(locKey), uuid);
 + **加锁和解锁必须具有原子性**
 
 # 17、Redis6新功能
+
+## 17.1、ACL 访问控制列表
+
+### 17.1.1、简介
+
+​	Reids ACL是Access Control List（访问控制列表）的缩写，该功能允许根据可以执行的命令和可以访问的键来限制某些连接。
+
+​	在Redis5版本之前，Redis安全规则只有密码控制还有通过rename来调整高危命令比如`flushdb`,`keys *`,`flushall`,`shutdown`等。Redis6中则提供ACL的功能对用户进行更细粒度的权限控制：
+
++ **接入权限：用户名和密码**
++ **可以执行的命令**
++ **可以操作的key**
+
+参考官网：https://redis.io/topics/acl
+
+### 17.1.2、命令
+
+1、使用`acl list`命令查看已有用户的权限列表
+
+<img src='img\image-20221103104654672.png'>
+
+2、使用`acl cat`查看添加权限指令类别
+
+<img src='img\image-20221103104852724.png'>
+
+3、使用`acl cat keyspace/read/write/...`查看具体命令
+
+<img src='img\image-20221103105003543.png'>
+
+4、使用`acl whoami`查看当前正在使用的用户
+
+<img src='img\image-20221103105048068.png'>
+
+5、使用`auth username passwd`切换用户
+
+6、使用`aclsetuser`来创建和编辑用户
+
++ ACL规则
+
+  下面是有效ACL规则的列表。某些规则只是用于激活或删除标志，或对用户ACL执行给定更改的单个单词。其他规则是字符前缀，它们与命令或类别名称、键模式等连接在一起。
+
+  <img src='img\image-20221103110032939.png'>
+
+  
+
++ 通过命令创建新用户（默认权限）
+
+  > <img src='img\image-20221103110143181.png'>
+  >
+  > 在上面的示例中，我根本没有指定任何规则。如果用户不存在，这将使用just created的默认属性来创建用户。如果用户已经存在，则上面的命令将不执行任何操作。
+
++ 设置用户名、密码、ACL权限、并启用的用户
+
+  <img src='img\image-20221103110250454.png' style='zoom:100%'>
+
++ 切换用户，确认权限
+
+  <img src='img\image-20221103110351771.png'>
+
+
+
+## 17.2、IO多线程
+
+### 17.2.1、简介
+
+Redis6终于支撑多线程了，告别单线程了吗？
+
+IO多线程其实指**客户端交互部分**的**网络IO**交互处理模块**多线程**，而非**执行命令多线程**。Redis6执行命令依然。是单线程
+
+### 17.2.2、原理结构
+
+Redis 6 加入多线程,但跟 Memcached 这种从 IO处理到数据访问多线程的实现模式有些差异。Redis 的多线程部分只是用来处理网络数据的读写和协议解析，执行命令仍然是单线程。之所以这么设计是不想因为多线程而变得复杂，需要去控制 key、lua、事务，LPUSH/LPOP 等等的并发问题。整体的设计大体如下:
+
+<img src='img\image-20221103110551755.png'>
+
+另外，多线程IO默认也是不开启的，需要再配置文件中配置
+
+```sh
+# redis.conf中开启
+io-threads-do-reads  yes 
+io-threads 4
+```
+
+## 17.3、工具支持 Cluster
+
+之前老版Redis想要搭集群需要单独安装ruby环境，Redis 5 将 redis-trib.rb 的功能集成到 redis-cli 。另外官方 redis-benchmark 工具开始支持 cluster 模式了，通过多线程的方式对多个分片进行压测。
+
+<img src='img\image-20221103110656364.png'>
+
+## 17.4、其他新功能
+
+Redis6新功能还有：
+
+1、RESP3新的 Redis 通信协议：优化服务端与客户端之间通信
+
+2、Client side caching客户端缓存：基于 RESP3 协议实现的客户端缓存功能。为了进一步提升缓存的性能，将客户端经常访问的数据cache到客户端。减少TCP网络交互。
+
+3、Proxy集群代理模式：Proxy 功能，让 Cluster 拥有像单实例一样的接入方式，降低大家使用cluster的门槛。不过需要注意的是代理不改变 Cluster 的功能限制，不支持的命令还是不会支持，比如跨 slot 的多Key操作。
+
+4、Modules API
+
+Redis 6中模块API开发进展非常大，因为Redis Labs为了开发复杂的功能，从一开始就用上Redis模块。Redis可以变成一个框架，利用Modules来构建不同系统，而不需要从头开始写然后还要BSD许可。Redis一开始就是一个向编写各种系统开放的平台。
